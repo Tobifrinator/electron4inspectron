@@ -6,7 +6,9 @@ import { IPC_MESSAGES } from '@electron/internal/common/ipc-messages';
 import { syncMethods, asyncMethods, properties, navigationHistorySyncMethods } from '@electron/internal/common/web-view-methods';
 
 import { webContents } from 'electron/main';
-
+// [inspectron]: Begin
+import * as fs from 'fs';
+// [inspectron]: End
 interface GuestInstance {
   elementInstanceId: number;
   visibilityState?: DocumentVisibilityState;
@@ -19,10 +21,13 @@ const netBinding = process._linkedBinding('electron_common_net');
 
 const supportedWebViewEvents = Object.keys(webViewEvents);
 
+console.log(`[inspectron] (guest-view-manager.ts) supported Web View Events: ${supportedWebViewEvents}`);
+
 const guestInstances = new Map<number, GuestInstance>();
 const embedderElementsMap = new Map<string, number>();
 
 function makeWebPreferences (embedder: Electron.WebContents, params: Record<string, any>) {
+  
   // parse the 'webpreferences' attribute string, if set
   // this uses the same parsing rules as window.open uses for its features
   const parsedWebPreferences =
@@ -92,6 +97,31 @@ const createGuest = function (embedder: Electron.WebContents, embedderFrameId: n
 
   const { instanceId } = params;
 
+  console.log(`[inspectron] Params here: ${params}`);
+    // [inspectron]: Begin
+    let objectToPush = {
+      'Module': ['GuestViewManager','WebView'],
+      'Attribute': ['params','webPreferences'],
+      'Event': 'will-attach-webview',
+      'Params': params,
+      'Embedder': {
+        'embedderFrameId': embedderFrameId,
+        'elementInstanceId': elementInstanceId
+      }
+    }
+    let json = JSON.parse(fs.readFileSync('report.json', 'utf-8'));
+    if (typeof(json) == undefined)
+      json = []
+    json.push(objectToPush);    
+    fs.writeFileSync("report.json", JSON.stringify(json));
+    // [inspectron]: End
+
+  for (const paramProperty in params) {
+    console.log(`${paramProperty}: ${params[paramProperty]}`);
+  }
+
+  console.log(`[inspectron] (guest-view-manager.ts) createGuest ${event}`);
+  
   embedder.emit('will-attach-webview', event, webPreferences, params);
   if (event.defaultPrevented) {
     return -1;
@@ -102,6 +132,11 @@ const createGuest = function (embedder: Electron.WebContents, embedderFrameId: n
     type: 'webview',
     embedder
   });
+
+  console.log(`[inspectron] (guest-view-manager.ts) Listener Count for will-navigate Embedder ${embedder.listenerCount('will-attach-webview')}`);
+  console.log(`[inspectron] (guest-view-manager.ts) Listener Count for will-navigate Guest ${guest.listenerCount('will-attach-webview')}`);
+
+
 
   const guestInstanceId = guest.id;
   guestInstances.set(guestInstanceId, {
@@ -130,6 +165,7 @@ const createGuest = function (embedder: Electron.WebContents, embedderFrameId: n
     if (params.src) {
       this.loadURL(params.src, makeLoadURLOptions(params));
     }
+    console.log(`[inspectron] Embedder Events: ${embedder.listenerCount('will-navigate')}`);
     embedder.emit('did-attach-webview', event, guest);
   });
 
@@ -150,12 +186,14 @@ const createGuest = function (embedder: Electron.WebContents, embedderFrameId: n
   // Dispatch events to embedder.
   for (const event of supportedWebViewEvents) {
     guest.on(event as any, function (_, ...args: any[]) {
+      console.log(`[inspectron] (guest-view-manager.ts) On Event: ${event}, Args: ${args}`);
       sendToEmbedder(IPC_MESSAGES.GUEST_VIEW_INTERNAL_DISPATCH_EVENT, event, makeProps(event, args));
     });
   }
 
   // Dispatch guest's IPC messages to embedder.
   guest.on('ipc-message-host' as any, function (event: Electron.IpcMainEvent, channel: string, args: any[]) {
+    console.log(`[inspectron] (guest-view-manager.ts) On IPC Event: ${event}, Args: ${args}`);
     sendToEmbedder(IPC_MESSAGES.GUEST_VIEW_INTERNAL_DISPATCH_EVENT, 'ipc-message', {
       frameId: [event.processId, event.frameId],
       channel,
@@ -286,6 +324,10 @@ const handleMessageSync = function (channel: string, handler: (event: ElectronIn
 };
 
 handleMessage(IPC_MESSAGES.GUEST_VIEW_MANAGER_CREATE_AND_ATTACH_GUEST, function (event, embedderFrameId: number, elementInstanceId: number, params) {
+  console.log(`[inspectron] (guest-view-manager.ts; handleMessage(Create and Attach)); Params:`);
+  for (const param in params) {
+    console.log(param);
+  }
   return createGuest(event.sender, embedderFrameId, elementInstanceId, params);
 });
 
@@ -299,6 +341,10 @@ ipcMainInternal.on(IPC_MESSAGES.GUEST_VIEW_MANAGER_FOCUS_CHANGE, function (event
 });
 
 handleMessage(IPC_MESSAGES.GUEST_VIEW_MANAGER_CALL, function (event, guestInstanceId: number, method: string, args: any[]) {
+  console.log(`[inspectron] (guest-view-manager.ts; handleMessage(GUEST_VIEW_MANAGER_CALL)); Event: ${event}, method: ${method}, args: `);
+  for (const arg in args) {
+    console.log(arg);
+  }
   const guest = getGuestForWebContents(guestInstanceId, event.sender);
   if (!asyncMethods.has(method)) {
     throw new Error(`Invalid method: ${method}`);
@@ -334,6 +380,10 @@ handleMessageSync(IPC_MESSAGES.GUEST_VIEW_MANAGER_PROPERTY_GET, function (event,
 });
 
 handleMessageSync(IPC_MESSAGES.GUEST_VIEW_MANAGER_PROPERTY_SET, function (event, guestInstanceId: number, property: string, val: any) {
+  console.log(`[inspectron] (guest-view-manager.ts; handleMessageSync(GUEST_VIEW_MANAGER_PROPERTY_SET)); Event: ${event}, method: ${property}, args: `);
+  for (const arg in val) {
+    console.log(arg);
+  }
   const guest = getGuestForWebContents(guestInstanceId, event.sender);
   if (!properties.has(property)) {
     throw new Error(`Invalid property: ${property}`);

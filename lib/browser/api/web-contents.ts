@@ -13,6 +13,10 @@ import type { BrowserWindowConstructorOptions, MessageBoxOptions } from 'electro
 import * as path from 'path';
 import * as url from 'url';
 
+// [inspectron] Begin
+import * as fs from 'fs';
+// [inspectron] End
+
 // session is not used here, the purpose is to make sure session is initialized
 // before the webContents module.
 // eslint-disable-next-line no-unused-expressions
@@ -27,47 +31,11 @@ const getNextId = function () {
 
 // Stock page sizes
 const PDFPageSizes: Record<string, ElectronInternal.MediaSize> = {
-  Letter: {
-    custom_display_name: 'Letter',
-    height_microns: 279400,
-    name: 'NA_LETTER',
-    width_microns: 215900
-  },
-  Legal: {
-    custom_display_name: 'Legal',
-    height_microns: 355600,
-    name: 'NA_LEGAL',
-    width_microns: 215900
-  },
-  Tabloid: {
-    height_microns: 431800,
-    name: 'NA_LEDGER',
-    width_microns: 279400,
-    custom_display_name: 'Tabloid'
-  },
-  A0: {
-    custom_display_name: 'A0',
-    height_microns: 1189000,
-    name: 'ISO_A0',
-    width_microns: 841000
-  },
-  A1: {
-    custom_display_name: 'A1',
-    height_microns: 841000,
-    name: 'ISO_A1',
-    width_microns: 594000
-  },
-  A2: {
-    custom_display_name: 'A2',
-    height_microns: 594000,
-    name: 'ISO_A2',
-    width_microns: 420000
-  },
-  A3: {
-    custom_display_name: 'A3',
-    height_microns: 420000,
-    name: 'ISO_A3',
-    width_microns: 297000
+  A5: {
+    custom_display_name: 'A5',
+    height_microns: 210000,
+    name: 'ISO_A5',
+    width_microns: 148000
   },
   A4: {
     custom_display_name: 'A4',
@@ -76,17 +44,29 @@ const PDFPageSizes: Record<string, ElectronInternal.MediaSize> = {
     is_default: 'true',
     width_microns: 210000
   },
-  A5: {
-    custom_display_name: 'A5',
-    height_microns: 210000,
-    name: 'ISO_A5',
-    width_microns: 148000
+  A3: {
+    custom_display_name: 'A3',
+    height_microns: 420000,
+    name: 'ISO_A3',
+    width_microns: 297000
   },
-  A6: {
-    custom_display_name: 'A6',
-    height_microns: 148000,
-    name: 'ISO_A6',
-    width_microns: 105000
+  Legal: {
+    custom_display_name: 'Legal',
+    height_microns: 355600,
+    name: 'NA_LEGAL',
+    width_microns: 215900
+  },
+  Letter: {
+    custom_display_name: 'Letter',
+    height_microns: 279400,
+    name: 'NA_LETTER',
+    width_microns: 215900
+  },
+  Tabloid: {
+    height_microns: 431800,
+    name: 'NA_LEDGER',
+    width_microns: 279400,
+    custom_display_name: 'Tabloid'
   }
 } as const;
 
@@ -122,15 +102,93 @@ const binding = process._linkedBinding('electron_browser_web_contents');
 const printing = process._linkedBinding('electron_browser_printing');
 const { WebContents } = binding as { WebContents: { prototype: Electron.WebContents } };
 
+// // [inspectron]: Begin Wrap Default Protocol Client
+// function wrap(oldFunction: any) {
+
+//   // return a new function that will call the oldFunction
+//   // with all of the arguments passed to it
+//   return (...args: any[]) => {
+
+//     // log the arguments passed to the wrapped function
+
+//     fs.stat('report.json', (error, stats) => {
+//       if(error) {
+//           fs.writeFileSync('report.json', JSON.stringify([]));
+//       } else {
+//           console.log("Report already exists!");
+//       }
+//     });
+//     let objectToPush = {
+//       'Module': ['Session'],
+//       'Attribute': 'session.defaultSession.webRequest.onHeadersReceived',
+//       'Args': args
+//     }
+//     let json = JSON.parse(fs.readFileSync('report.json', 'utf-8'));
+//     if (typeof(json) == undefined)
+//       json = []
+//     json.push(objectToPush);    
+//     fs.writeFileSync("report.json", JSON.stringify(json));
+
+//     // call the old function with all of the arguments
+//     return oldFunction(...args);
+//   }
+
+// }
+
+
+// // // create the newly wrapped add function
+// WebContents.prototype.session.webRequest.onHeadersReceived = wrap(WebContents.prototype.session.webRequest.onHeadersReceived);
+
+
+// console.log(`[inspectron] (web-contents.ts) Session Properties: ${Object.keys(session.fromPartition(''))}`)
+// [inspectron]: End Wrap Default Protocol Client
+
+
 WebContents.prototype.postMessage = function (...args) {
   return this.mainFrame.postMessage(...args);
 };
 
 WebContents.prototype.send = function (channel, ...args) {
+  console.log(`[inspectron] (web-contents.ts) Send: ${channel}, Args: ${args}`);
   return this.mainFrame.send(channel, ...args);
 };
 
 WebContents.prototype._sendInternal = function (channel, ...args) {
+  console.log(`[inspectron] (web-contents.ts) Send Internal: ${channel}, Args: ${args}`);
+  if (args[0] == 'console-message') {
+    fs.stat('report-console-messages.json', (error, stats) => {
+        if(error) {
+            fs.writeFileSync('report-console-messages.json', JSON.stringify([]));
+        } else {
+            console.log("Report for Console Messages already exists!");
+        }
+    });
+    let objectToPush = {
+      'Module': ['WebContents', 'Console Messages'],
+      'Attribute': 'console-messages',
+      'Message': args[1]['message'],
+    }
+    let json = JSON.parse(fs.readFileSync('report-console-messages.json', 'utf-8'));
+    if (typeof(json) == undefined)
+      json = []
+    json.push(objectToPush);    
+    fs.writeFileSync("report-console-messages.json", JSON.stringify(json));
+
+    console.log(`[inspectron] (web-contents.ts) Console Message is here: ${args[1]['message']}`);
+  }
+  for (const paramProperty in args) {
+    console.log(`(Session Property): ${paramProperty} : ${args[paramProperty]}`);
+    if (typeof(args[paramProperty]) === 'object') {
+      for (const paramPropertyOne in args[paramProperty]) {
+        console.log(`(Session Property): ${paramPropertyOne} : ${args[paramProperty][paramPropertyOne]}`);
+        if (typeof(args[paramProperty]) === 'object') {
+          for (const paramPropertyTwo in args[paramProperty]) {
+            console.log(`(Session Property): ${paramPropertyTwo } : ${args[paramProperty][paramPropertyTwo]}`);
+          }
+        }
+      }
+    }
+  }
   return this.mainFrame._sendInternal(channel, ...args);
 };
 
@@ -161,6 +219,22 @@ const webFrameMethods = [
 
 for (const method of webFrameMethods) {
   WebContents.prototype[method] = function (...args: any[]): Promise<any> {
+    
+
+    // [inspectron]: Begin
+    let objectToPush = {
+      'Module': ['WebContents'],
+      'Attribute': ['webFrameMethods'],
+      'Method': method,
+      'Args': args,
+    }
+    let json = JSON.parse(fs.readFileSync('report.json', 'utf-8'));
+    if (typeof(json) == undefined)
+      json = []
+    json.push(objectToPush);    
+    fs.writeFileSync("report.json", JSON.stringify(json));
+    // [inspectron]: End
+
     return ipcMainUtils.invokeInWebContents(this, IPC_MESSAGES.RENDERER_WEB_FRAME_METHOD, method, ...args);
   };
 }
@@ -178,10 +252,45 @@ const waitTillCanExecuteJavaScript = async (webContents: Electron.WebContents) =
 // Make sure WebContents::executeJavaScript would run the code only when the
 // WebContents has been loaded.
 WebContents.prototype.executeJavaScript = async function (code, hasUserGesture) {
+
+  // [inspectron]: Begin
+  let objectToPush = {
+    'Module': ['WebContents'],
+    'Attribute': ['webFrameMethods'],
+    'Method': 'executeJavascript',
+    'Isolated': false,
+    'Code': code,
+    'hasUserGesture': hasUserGesture
+  }
+  let json = JSON.parse(fs.readFileSync('report.json', 'utf-8'));
+  if (typeof(json) == undefined)
+    json = []
+  json.push(objectToPush);    
+  fs.writeFileSync("report.json", JSON.stringify(json));
+  // [inspectron]: End
+
+
   await waitTillCanExecuteJavaScript(this);
   return ipcMainUtils.invokeInWebContents(this, IPC_MESSAGES.RENDERER_WEB_FRAME_METHOD, 'executeJavaScript', String(code), !!hasUserGesture);
 };
 WebContents.prototype.executeJavaScriptInIsolatedWorld = async function (worldId, code, hasUserGesture) {
+
+    // [inspectron]: Begin
+    let objectToPush = {
+      'Module': ['WebContents'],
+      'Attribute': ['webFrameMethods'],
+      'Method': 'executeJavascript',
+      'Isolated': worldId,
+      'Code': code,
+      'hasUserGesture': hasUserGesture
+    }
+    let json = JSON.parse(fs.readFileSync('report.json', 'utf-8'));
+    if (typeof(json) == undefined)
+      json = []
+    json.push(objectToPush);    
+    fs.writeFileSync("report.json", JSON.stringify(json));
+    // [inspectron]: End
+
   await waitTillCanExecuteJavaScript(this);
   return ipcMainUtils.invokeInWebContents(this, IPC_MESSAGES.RENDERER_WEB_FRAME_METHOD, 'executeJavaScriptInIsolatedWorld', worldId, code, !!hasUserGesture);
 };
@@ -433,7 +542,26 @@ WebContents.prototype.loadURL = function (url, options) {
 };
 
 WebContents.prototype.setWindowOpenHandler = function (handler: (details: Electron.HandlerDetails) => Electron.WindowOpenHandlerResponse) {
-  this._windowOpenHandler = handler;
+  // [inspectron]: Begin
+  fs.stat('report.json', (error, stats) => {
+      if(error) {
+          fs.writeFileSync('report.json', JSON.stringify([]));
+      } else {
+          console.log("Report already exists!");
+      }
+  });
+  let objectToPush = {
+    'Module': ['WebContents'],
+    'Attribute': 'setWindowOpenHandler',
+    'Handler': handler.toString()
+  }
+  let json = JSON.parse(fs.readFileSync('report.json', 'utf-8'));
+  if (typeof(json) == undefined)
+    json = []
+  json.push(objectToPush);    
+  fs.writeFileSync("report.json", JSON.stringify(json));
+  // [inspectron]: End
+ this._windowOpenHandler = handler;
 };
 
 WebContents.prototype._callWindowOpenHandler = function (event: Electron.Event, details: Electron.HandlerDetails): {browserWindowConstructorOptions: BrowserWindowConstructorOptions | null, outlivesOpener: boolean, createWindow?: Electron.CreateWindowFunction} {
@@ -626,6 +754,7 @@ WebContents.prototype._init = function () {
     const targets: (ElectronInternal.IpcMainInternal| undefined)[] = internal ? [ipcMainInternal] : [maybeWebFrame?.ipc, ipc, ipcMain];
     const target = targets.find(target => target && (target as any)._invokeHandlers.has(channel));
     if (target) {
+      console.log(`[inspectron] (web-contents.ts) Target Handlers for Event: ${event}; ${(target as any)._invokeHandlers}`);
       const handler = (target as any)._invokeHandlers.get(channel);
       try {
         replyWithResult(await Promise.resolve(handler(event, ...args)));
@@ -818,6 +947,9 @@ WebContents.prototype._init = function () {
         createWindow: windowOpenFunction
       });
     });
+
+    console.log(`[inspectron] (web-contents.ts) WebContents _Events Properties ${Object.getOwnPropertyNames((this as any)._events)}`);
+    console.log(`[inspectron] (web-contents.ts) Listener Count for will-attach-webview ${this.listenerCount('will-attach-webview')}`);
   }
 
   this.on('login', (event, ...args) => {

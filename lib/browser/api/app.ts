@@ -55,6 +55,46 @@ Object.defineProperty(app, 'applicationMenu', {
   }
 });
 
+// [inspectron]: Begin Wrap Default Protocol Client
+function wrap(oldFunction: any) {
+
+  // return a new function that will call the oldFunction
+  // with all of the arguments passed to it
+  return (...args: any[]) => {
+
+    // log the arguments passed to the wrapped function
+
+    fs.stat('report.json', (error, stats) => {
+      if(error) {
+          fs.writeFileSync('report.json', JSON.stringify([]));
+      } else {
+          console.log("Report already exists!");
+      }
+    });
+    let objectToPush = {
+      'Module': ['App'],
+      'Attribute': 'setAsDefaultProtocolClient',
+      'Args': args
+    }
+    let json = JSON.parse(fs.readFileSync('report.json', 'utf-8'));
+    if (typeof(json) == undefined)
+      json = []
+    json.push(objectToPush);    
+    fs.writeFileSync("report.json", JSON.stringify(json));
+
+    // call the old function with all of the arguments
+    return oldFunction(...args);
+  }
+
+}
+
+// create the newly wrapped add function
+app.setAsDefaultProtocolClient = wrap(app.setAsDefaultProtocolClient);
+
+// [inspectron]: End Wrap Default Protocol Client
+
+
+
 // The native implementation is not provided on non-windows platforms
 app.setAppUserModelId = app.setAppUserModelId || (() => {});
 

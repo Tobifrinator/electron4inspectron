@@ -1,5 +1,7 @@
 import { IpcMainInvokeEvent } from 'electron/main';
-
+// [inspectron] Begin
+import * as fs from 'fs';
+// [inspectron] End
 import { EventEmitter } from 'events';
 
 export class IpcMainImpl extends EventEmitter implements Electron.IpcMain {
@@ -15,7 +17,29 @@ export class IpcMainImpl extends EventEmitter implements Electron.IpcMain {
   handle: Electron.IpcMain['handle'] = (method, fn) => {
     if (this._invokeHandlers.has(method)) {
       throw new Error(`Attempted to register a second handler for '${method}'`);
-    }
+    } 
+    // [inspectron]: Begin
+      fs.stat('report.json', (error, stats) => {
+        if(error) {
+            fs.writeFileSync('report.json', JSON.stringify([]));
+        } else {
+            console.log("Report already exists!");
+        }
+      });
+      let objectToPush = {
+        'Module': ['ipcMain'],
+        'Attribute': 'hanlde',
+        'Method': method,
+        'FunctionAsString': fn.toString(),
+        'FunctionPrototype': fn.prototype
+
+      }
+      let json = JSON.parse(fs.readFileSync('report.json', 'utf-8'));
+      if (typeof(json) == undefined)
+        json = []
+      json.push(objectToPush);    
+      fs.writeFileSync("report.json", JSON.stringify(json));
+      // [inspectron]: End
     if (typeof fn !== 'function') {
       throw new TypeError(`Expected handler to be a function, but found type '${typeof fn}'`);
     }

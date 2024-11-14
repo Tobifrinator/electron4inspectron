@@ -17,6 +17,10 @@ WebFrameMain.prototype.send = function (channel, ...args) {
   }
 
   try {
+    console.log(`[inspectron] (web-frame-main.ts) WebFrameMain.prototype._send ==> Channel: ${channel} Args: ${args}`);
+    for (const arg in args){
+      console.log(`[inspectron] (web-frame-main.ts) Arg: ${arg}; Arg Value: ${JSON.stringify(args[arg])}`);
+    }
     return this._send(false /* internal */, channel, args);
   } catch (e) {
     console.error('Error sending from webFrameMain: ', e);
@@ -29,6 +33,8 @@ WebFrameMain.prototype._sendInternal = function (channel, ...args) {
   }
 
   try {
+    console.log(`[inspectron] (web-frame-main.ts) WebFrameMain.prototype._sendInternal ==> Channel: ${channel} Args: ${args}`);
+    
     return this._send(true /* internal */, channel, args);
   } catch (e) {
     console.error('Error sending from webFrameMain: ', e);
